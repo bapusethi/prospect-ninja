@@ -7,22 +7,10 @@ import { Button } from "@/components/Button";
 import { Field, Select, TextArea, TextInput } from "@/components/Field";
 import styles from "./CampaignForm.module.css";
 import {
-  COMPANY_SIZES,
   DAILY_PROSPECT_LIMIT,
   MESSAGE_TONES,
   type Icp,
 } from "@/modules/campaigns/schema";
-
-function joinList(values: string[]): string {
-  return values.join(", ");
-}
-
-function splitList(value: string): string[] {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
 
 export function CampaignForm({
   campaignId,
@@ -53,12 +41,15 @@ export function CampaignForm({
       isActive: formData.get("isActive") === "on",
       dailyDiscoverLimit: DAILY_PROSPECT_LIMIT,
       icp: {
-        jobTitles: splitList(String(formData.get("jobTitles") ?? "")),
-        industries: splitList(String(formData.get("industries") ?? "")),
-        locations: splitList(String(formData.get("locations") ?? "")),
-        keywords: splitList(String(formData.get("keywords") ?? "")),
-        exclusions: splitList(String(formData.get("exclusions") ?? "")),
-        companySize: String(formData.get("companySize") ?? ""),
+        // Targeting fields are no longer on the form; keep any saved values on edit.
+        jobTitles: icp?.jobTitles ?? [],
+        industries: icp?.industries ?? [],
+        locations: icp?.locations ?? [],
+        keywords: icp?.keywords ?? [],
+        exclusions: icp?.exclusions ?? [],
+        companySize: icp?.companySize,
+        companySizeMin: icp?.companySizeMin,
+        companySizeMax: icp?.companySizeMax,
         productService: String(formData.get("productService") ?? ""),
         outreachObjective: String(formData.get("outreachObjective") ?? ""),
         senderName: String(formData.get("senderName") ?? "").trim() || undefined,
@@ -122,64 +113,6 @@ export function CampaignForm({
               minLength={10}
               defaultValue={initial?.description}
               placeholder="Find operations leaders at mid-market SaaS companies who may need outreach help."
-            />
-          </Field>
-        </div>
-        <Field
-          label="Target job titles"
-          hint="Comma-separated. Examples: CEO, Founder, CTO, Marketing Director"
-        >
-          <TextInput
-            name="jobTitles"
-            required
-            defaultValue={joinList(icp?.jobTitles ?? [])}
-            placeholder="CEO, Founder, CTO"
-          />
-        </Field>
-        <Field
-          label="Target industries"
-          hint="Examples: SaaS, IT Services, FinTech, Healthcare"
-        >
-          <TextInput
-            name="industries"
-            required
-            defaultValue={joinList(icp?.industries ?? [])}
-            placeholder="SaaS, FinTech"
-          />
-        </Field>
-        <Field
-          label="Target locations"
-          hint="Examples: Australia, United States, United Kingdom"
-        >
-          <TextInput
-            name="locations"
-            required
-            defaultValue={joinList(icp?.locations ?? [])}
-            placeholder="Australia, United States"
-          />
-        </Field>
-        <Field label="Company size">
-          <Select
-            name="companySize"
-            required
-            defaultValue={icp?.companySize ?? ""}
-          >
-            <option value="" disabled>
-              Select a range
-            </option>
-            {COMPANY_SIZES.map((size) => (
-              <option key={size.id} value={size.id}>
-                {size.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <div className={styles.wide}>
-          <Field label="Keywords" hint="Optional extra matching terms.">
-            <TextInput
-              name="keywords"
-              defaultValue={joinList(icp?.keywords ?? [])}
-              placeholder="revenue operations, outbound"
             />
           </Field>
         </div>

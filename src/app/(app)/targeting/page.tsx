@@ -58,9 +58,6 @@ export default async function TargetingPage({
               <thead>
                 <tr>
                   <th>Campaign</th>
-                  <th>Job titles</th>
-                  <th>Locations</th>
-                  <th>Industry</th>
                   <th>Status</th>
                   <th>Prospects</th>
                   <th>Pending</th>
@@ -82,9 +79,6 @@ export default async function TargetingPage({
                         </div>
                       ) : null}
                     </td>
-                    <td>{campaign.icp.jobTitles.join(", ") || "—"}</td>
-                    <td>{campaign.icp.locations.join(", ") || "—"}</td>
-                    <td>{campaign.icp.industries.join(", ") || "—"}</td>
                     <td>
                       <Badge status={campaign.isActive ? "active" : "paused"} />
                     </td>

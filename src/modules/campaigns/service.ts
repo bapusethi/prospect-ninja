@@ -8,6 +8,60 @@ import {
   parseIcp,
   type CampaignInput,
 } from "@/modules/campaigns/schema";
+import {
+  isAiQueryAvailable,
+  targetingFromDescription,
+} from "@/modules/discovery/aiQuery";
+
+type ParsedIcp = ReturnType<typeof campaignInputSchema.parse>["icp"];
+
+function hasTargeting(icp: ParsedIcp): boolean {
+  return (
+    icp.jobTitles.length > 0 ||
+    icp.industries.length > 0 ||
+    icp.locations.length > 0 ||
+    Boolean(icp.companySize) ||
+    Boolean(icp.companySizeMin)
+  );
+}
+
+/**
+ * The form has no targeting fields, so fill them from the description with
+ * OpenAI: discovery (RocketReach query + scoring) and message generation read them.
+ */
+async function withTargeting(
+  description: string,
+  icp: ParsedIcp,
+  options: { descriptionChanged: boolean },
+): Promise<ParsedIcp> {
+  if (hasTargeting(icp) && !options.descriptionChanged) {
+    return icp;
+  }
+  if (!isAiQueryAvailable()) {
+    return icp;
+  }
+  const targeting = await targetingFromDescription(description);
+  const derived = {
+    ...icp,
+    ...targeting,
+    companySize: undefined,
+    companySizeMin: targeting.companySizeMin,
+    companySizeMax: targeting.companySizeMax,
+  };
+  if (!hasTargeting(derived)) {
+    throw new Error(
+      "Could not work out who to target from the campaign description. Mention the roles, locations, industries or company size you are looking for.",
+    );
+  }
+  return derived;
+}
+
+function icpForStorage(icp: ParsedIcp) {
+  // A preset bucket sets the bounds; otherwise keep the exact derived range.
+  return icp.companySize
+    ? { ...icp, ...companySizeBounds(icp.companySize) }
+    : icp;
+}
 
 function mapCampaign<
   T extends {
@@ -54,7 +108,9 @@ export async function getCampaign(userId: string, id: string) {
 
 export async function createCampaign(userId: string, input: CampaignInput) {
   const data = campaignInputSchema.parse(input);
-  const bounds = companySizeBounds(data.icp.companySize);
+  const icp = await withTargeting(data.description, data.icp, {
+    descriptionChanged: false,
+  });
   return prisma.campaign.create({
     data: {
       userId,
@@ -62,10 +118,7 @@ export async function createCampaign(userId: string, input: CampaignInput) {
       description: data.description,
       isActive: data.isActive,
       dailyDiscoverLimit: clampDailyLimit(data.dailyDiscoverLimit),
-      icp: {
-        ...data.icp,
-        ...bounds,
-      },
+      icp: icpForStorage(icp),
     },
   });
 }
@@ -80,7 +133,9 @@ export async function updateCampaign(
     throw new Error("Campaign not found.");
   }
   const data = campaignInputSchema.parse(input);
-  const bounds = companySizeBounds(data.icp.companySize);
+  const icp = await withTargeting(data.description, data.icp, {
+    descriptionChanged: data.description !== existing.description,
+  });
   return prisma.campaign.update({
     where: { id },
     data: {
@@ -88,10 +143,7 @@ export async function updateCampaign(
       description: data.description,
       isActive: data.isActive,
       dailyDiscoverLimit: clampDailyLimit(data.dailyDiscoverLimit),
-      icp: {
-        ...data.icp,
-        ...bounds,
-      },
+      icp: icpForStorage(icp),
     },
   });
 }
