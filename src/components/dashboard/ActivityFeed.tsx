@@ -31,6 +31,7 @@ function iconFor(type: string) {
     case AUDIT_ACTION.sendSucceeded:
     case AUDIT_ACTION.sendAttempted:
     case AUDIT_ACTION.demoSend:
+    case AUDIT_ACTION.markedSent:
       return <IconSend size={15} />;
     default:
       return <IconActivity size={15} />;

@@ -21,6 +21,7 @@ export function DiscoverButton({ campaignId }: { campaignId: string }) {
         added: number;
         skippedDuplicates: number;
         demo?: boolean;
+        draftsQueued?: boolean;
       };
     };
     setPending(false);
@@ -31,8 +32,11 @@ export function DiscoverButton({ campaignId }: { campaignId: string }) {
     const extra = data.result?.demo
       ? " Demo provider — sample data only."
       : "";
+    const drafts = data.result?.draftsQueued
+      ? " Drafting messages in the background — refresh in a moment."
+      : "";
     setMessage(
-      `Added ${data.result?.added ?? 0} prospects (${data.result?.skippedDuplicates ?? 0} duplicates skipped).${extra}`,
+      `Added ${data.result?.added ?? 0} prospects (${data.result?.skippedDuplicates ?? 0} duplicates skipped).${drafts}${extra}`,
     );
     router.refresh();
   }
