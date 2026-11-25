@@ -25,7 +25,7 @@ const dateFormat = new Intl.DateTimeFormat("en-US", {
 });
 
 const TABS = [
-  { key: "all", label: "All replies", href: "/inbox" },
+  { key: "all", label: "All", href: "/inbox" },
   ...INBOX_STATUSES.map((status) => ({
     key: status,
     label: INBOX_STATUS_LABELS[status],
@@ -57,7 +57,7 @@ export default async function InboxPage({
       <PageHeader
         kicker="Every reply, one place"
         title="Inbox"
-        description="Replies from LinkedIn, ready for your next move."
+        description="Replies and accepted connections from LinkedIn, ready for your next move."
       />
 
       {!result ? <Banner tone="error">{DATABASE_UNREACHABLE_MESSAGE}</Banner> : null}
@@ -98,7 +98,7 @@ export default async function InboxPage({
               description={
                 filter
                   ? "Mark a reply with this status and it shows up here."
-                  : "When someone messages your linked LinkedIn account, it shows up here."
+                  : "When someone messages your linked LinkedIn account or accepts your connection request, it shows up here."
               }
             />
           ) : (
@@ -115,10 +115,11 @@ export default async function InboxPage({
 }
 
 function ReplyCard({ reply }: { reply: InboxReply }) {
+  const isConnection = reply.kind === "connection";
   const meta = [
     reply.campaignName,
     reply.sentAt ? `Sent ${dateFormat.format(reply.sentAt)}` : null,
-    `Replied ${dateFormat.format(reply.receivedAt)}`,
+    `${isConnection ? "Connected" : "Replied"} ${dateFormat.format(reply.receivedAt)}`,
   ].filter(Boolean);
 
   return (
@@ -165,14 +166,21 @@ function ReplyCard({ reply }: { reply: InboxReply }) {
         ) : null}
       </div>
 
-      <blockquote className={styles.quote}>
-        <div className={styles.quoteLabel}>Reply from {reply.firstName}</div>
-        <p className={styles.quoteText}>{reply.text}</p>
-      </blockquote>
+      {isConnection ? (
+        <p className={styles.connected}>
+          {reply.firstName} accepted your connection request. Send a 1:1 message to start the conversation.
+        </p>
+      ) : (
+        <blockquote className={styles.quote}>
+          <div className={styles.quoteLabel}>Reply from {reply.firstName}</div>
+          <p className={styles.quoteText}>{reply.text}</p>
+        </blockquote>
+      )}
 
       <InboxReplyActions
         key={reply.status ?? "none"}
         eventId={reply.id}
+        kind={reply.kind}
         firstName={reply.firstName}
         status={reply.status}
       />

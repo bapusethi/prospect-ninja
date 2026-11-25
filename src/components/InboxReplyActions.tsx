@@ -14,13 +14,18 @@ import {
 
 export function InboxReplyActions({
   eventId,
+  kind,
   firstName,
   status: savedStatus,
 }: {
   eventId: string;
+  /** connection: no thread yet, so the button starts a 1:1 chat. */
+  kind: "message" | "connection";
   firstName: string;
   status: InboxStatus | null;
 }) {
+  const isConnection = kind === "connection";
+  const noun = isConnection ? "message" : "reply";
   const router = useRouter();
   const [status, setStatus] = useState<InboxStatus | null>(savedStatus);
   const [statusPending, setStatusPending] = useState(false);
@@ -70,7 +75,7 @@ export function InboxReplyActions({
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        setError(data.error ?? "Could not send the reply.");
+        setError(data.error ?? `Could not send the ${noun}.`);
         return;
       }
       setText("");
@@ -109,11 +114,13 @@ export function InboxReplyActions({
           aria-expanded={open}
         >
           <IconMessage size={18} />
-          Reply
+          {isConnection ? "Message" : "Reply"}
         </Button>
       </div>
 
-      {sent ? <p className={styles.sent}>Reply sent on LinkedIn.</p> : null}
+      {sent ? (
+        <p className={styles.sent}>{isConnection ? "Message" : "Reply"} sent on LinkedIn.</p>
+      ) : null}
       {error && !open ? <p className={styles.error}>{error}</p> : null}
 
       {open ? (
@@ -121,7 +128,7 @@ export function InboxReplyActions({
           <TextArea
             rows={4}
             value={text}
-            placeholder={`Reply to ${firstName}…`}
+            placeholder={isConnection ? `Message ${firstName}…` : `Reply to ${firstName}…`}
             onChange={(event) => setText(event.target.value)}
             disabled={pending}
             autoFocus
@@ -134,7 +141,7 @@ export function InboxReplyActions({
                 Cancel
               </Button>
               <Button type="button" onClick={send} disabled={pending || text.trim().length === 0}>
-                {pending ? "Sending…" : "Send reply"}
+                {pending ? "Sending…" : isConnection ? "Send message" : "Send reply"}
               </Button>
             </div>
           </div>
