@@ -12,6 +12,8 @@ const protectedPagePrefixes = [
   "/leads",
   "/outreach",
   "/approval",
+  "/drafts",
+  "/send",
   "/analytics",
   "/history",
   "/settings",

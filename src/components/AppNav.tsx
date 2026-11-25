@@ -6,15 +6,15 @@ import { useEffect, useState } from "react";
 import styles from "./AppNav.module.css";
 import {
   IconChart,
-  IconClipboardCheck,
   IconHistory,
-  IconInbox,
   IconLayoutDashboard,
+  IconListChecks,
   IconLogOut,
   IconMegaphone,
   IconMessage,
   IconNinjaMark,
   IconPanelLeft,
+  IconSend,
   IconSettings,
   IconSparkles,
   IconUser,
@@ -25,11 +25,10 @@ const primaryLinks = [
   { href: "/dashboard", label: "Dashboard", Icon: IconLayoutDashboard },
   { href: "/targeting", label: "Campaigns", Icon: IconMegaphone },
   { href: "/prospects", label: "Prospects", Icon: IconUsers },
+  { href: "/drafts", label: "Draft Queue", Icon: IconListChecks },
+  { href: "/send", label: "Send", Icon: IconSend },
   { href: "/inbox", label: "Inbox", Icon: IconMessage },
-  { href: "/leads", label: "Leads", Icon: IconInbox },
-  { href: "/outreach", label: "Outreach", Icon: IconMessage },
   { href: "/studio", label: "AI Message Studio", Icon: IconSparkles },
-  { href: "/approval", label: "Approval Queue", Icon: IconClipboardCheck },
 ];
 
 const secondaryLinks = [
@@ -43,9 +42,12 @@ const STORAGE_KEY = "pn-sidebar-collapsed";
 export function AppNav({
   children,
   userLabel,
+  badges = {},
 }: {
   children: React.ReactNode;
   userLabel: string;
+  /** Counts shown next to nav links, keyed by href. */
+  badges?: Record<string, number>;
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -97,6 +99,9 @@ export function AppNav({
               <Icon size={18} />
             </span>
             <span className={styles.linkLabel}>{label}</span>
+            {badges[href] ? (
+              <span className={styles.linkBadge}>{badges[href]}</span>
+            ) : null}
           </Link>
         ))}
       </>

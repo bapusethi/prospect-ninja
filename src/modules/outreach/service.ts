@@ -519,3 +519,97 @@ export async function listHistory(userId: string) {
     orderBy: { updatedAt: "desc" },
   });
 }
+
+/** Drafts still waiting on a decision: generated (or edited) but not approved or rejected. */
+const DRAFT_QUEUE_STATUSES = [MESSAGE_STATUS.draft, MESSAGE_STATUS.pendingReview];
+
+export async function listDraftQueue(userId: string, campaignId?: string) {
+  return prisma.outreachMessage.findMany({
+    where: {
+      campaign: { userId },
+      status: { in: DRAFT_QUEUE_STATUSES },
+      ...(campaignId ? { campaignId } : {}),
+    },
+    include: {
+      prospect: true,
+      campaign: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+export async function countDraftQueue(userId: string) {
+  return prisma.outreachMessage.count({
+    where: { campaign: { userId }, status: { in: DRAFT_QUEUE_STATUSES } },
+  });
+}
+
+/** Approves every queued draft (optionally for one campaign), one audit event each. */
+export async function approveAllDrafts(userId: string, campaignId?: string) {
+  const queued = await listDraftQueue(userId, campaignId);
+  let approved = 0;
+  const failed: Array<{ id: string; error: string }> = [];
+  for (const message of queued) {
+    try {
+      await approveMessage(userId, message.id);
+      approved += 1;
+    } catch (error) {
+      failed.push({
+        id: message.id,
+        error: error instanceof Error ? error.message : "Approval failed",
+      });
+    }
+  }
+  return { approved, failed };
+}
+
+/** Approved messages that haven't gone out yet. */
+export async function listReadyToSend(userId: string, campaignId?: string) {
+  return prisma.outreachMessage.findMany({
+    where: {
+      campaign: { userId },
+      status: MESSAGE_STATUS.approved,
+      ...(campaignId ? { campaignId } : {}),
+    },
+    include: {
+      prospect: true,
+      campaign: { select: { id: true, name: true } },
+    },
+    orderBy: { approvedAt: "asc" },
+  });
+}
+
+export async function countReadyToSend(userId: string) {
+  return prisma.outreachMessage.count({
+    where: { campaign: { userId }, status: MESSAGE_STATUS.approved },
+  });
+}
+
+/** Records that the user sent an approved message themselves, outside the app. */
+export async function markMessageSent(userId: string, id: string) {
+  const message = await getMessage(userId, id);
+  if (!message) {
+    throw new Error("Message not found.");
+  }
+  if (isProcessed(message.status)) {
+    throw new Error("This message was already processed.");
+  }
+  if (message.status !== MESSAGE_STATUS.approved) {
+    throw new Error("Only approved messages can be marked as sent.");
+  }
+  return runInteractiveTransaction(async (tx) => {
+    const updated = await tx.outreachMessage.update({
+      where: { id },
+      data: { status: MESSAGE_STATUS.sent, sentAt: new Date() },
+    });
+    await tx.messageAuditEvent.create({
+      data: {
+        messageId: id,
+        actorUserId: userId,
+        action: AUDIT_ACTION.markedSent,
+        bodySnapshot: message.body,
+      },
+    });
+    return updated;
+  });
+}

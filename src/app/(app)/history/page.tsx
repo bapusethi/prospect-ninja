@@ -33,8 +33,8 @@ export default async function HistoryPage() {
             title="No activity yet"
             description="Approve a draft, then use Send. Unapproved messages never leave the queue."
             action={
-              <Link href="/approval">
-                <Button>Open approval queue</Button>
+              <Link href="/drafts">
+                <Button>Open Draft queue</Button>
               </Link>
             }
           />

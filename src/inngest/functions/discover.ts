@@ -1,7 +1,11 @@
 import { cron, NonRetriableError } from "inngest";
 import { prisma } from "@/lib/db";
 import { discoverForCampaign } from "@/modules/prospects/service";
-import { campaignDiscoverRequested, inngest } from "@/inngest/client";
+import {
+  campaignDiscoverRequested,
+  draftRequestEvents,
+  inngest,
+} from "@/inngest/client";
 
 /**
  * Daily at 08:00 UTC: find active campaigns and queue one discovery job per
@@ -54,7 +58,7 @@ export const discoverCampaign = inngest.createFunction(
   async ({ event, step }) => {
     const { campaignId } = event.data;
 
-    return step.run("discover", async () => {
+    const result = await step.run("discover", async () => {
       // The owner is always the campaign's userId, so look it up rather
       // than requiring callers to pass it.
       const campaign = await prisma.campaign.findUnique({
@@ -76,6 +80,15 @@ export const discoverCampaign = inngest.createFunction(
         throw error;
       }
     });
+
+    if (result.prospects.length > 0) {
+      await step.sendEvent(
+        "queue-draft-generation",
+        draftRequestEvents(result.prospects.map((prospect) => prospect.id)),
+      );
+    }
+
+    return result;
   },
 );
 

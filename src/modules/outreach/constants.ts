@@ -61,4 +61,6 @@ export const AUDIT_ACTION = {
   invitationSent: "invitation_sent",
   sendFailed: "send_failed",
   demoSend: "demo_send",
+  /** The user sent it outside the app (e.g. pasted into LinkedIn) and recorded that here. */
+  markedSent: "marked_sent",
 } as const;

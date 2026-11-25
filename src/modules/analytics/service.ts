@@ -213,6 +213,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   [AUDIT_ACTION.sendSucceeded]: "Message sent",
   [AUDIT_ACTION.sendFailed]: "Send failed",
   [AUDIT_ACTION.demoSend]: "Demo send recorded",
+  [AUDIT_ACTION.markedSent]: "Marked as sent",
 };
 
 export async function listRecentActivity(userId: string, limit = 24) {
@@ -364,6 +365,8 @@ export function formatActivityAction(action: string): string {
       return "Send failed";
     case "demo_send":
       return "Demo recorded (not sent on LinkedIn)";
+    case "marked_sent":
+      return "Marked as sent (sent outside Prospect Ninja)";
     default:
       return action.replaceAll("_", " ");
   }
