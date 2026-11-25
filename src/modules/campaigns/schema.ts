@@ -5,11 +5,6 @@ const stringList = z
   .max(40)
   .default([]);
 
-const requiredList = z
-  .array(z.string().trim().min(1).max(120))
-  .min(1, "Add at least one value.")
-  .max(40);
-
 export const COMPANY_SIZES = [
   { id: "1-10", label: "1–10", min: 1, max: 10 },
   { id: "11-50", label: "11–50", min: 11, max: 50 },
@@ -67,10 +62,13 @@ export const campaignInputSchema = z.object({
     .transform((value) => clampDailyLimit(value))
     .default(DAILY_PROSPECT_LIMIT),
   icp: z.object({
-    jobTitles: requiredList,
-    industries: requiredList,
-    locations: requiredList,
-    companySize: companySizeSchema,
+    jobTitles: stringList,
+    industries: stringList,
+    locations: stringList,
+    companySize: companySizeSchema.optional(),
+    /** Exact employee range (e.g. 1–50); takes precedence over companySize. */
+    companySizeMin: z.number().int().min(1).optional(),
+    companySizeMax: z.number().int().min(1).optional(),
     keywords: stringList,
     exclusions: stringList,
     productService: z
@@ -94,15 +92,33 @@ export const campaignStatusSchema = z.object({
   isActive: z.boolean(),
 });
 
-export function companySizeBounds(size: z.infer<typeof companySizeSchema>): {
+export function companySizeBounds(
+  size: z.infer<typeof companySizeSchema> | undefined,
+): {
   companySizeMin?: number;
   companySizeMax?: number;
 } {
+  if (!size) {
+    return {};
+  }
   const match = COMPANY_SIZES.find((item) => item.id === size);
   return {
     companySizeMin: match?.min,
     companySizeMax: match?.max,
   };
+}
+
+/** The ICP's employee range as a RocketReach-style string: "1-50", "501+". */
+export function companySizeRange(icp: {
+  companySizeMin?: number;
+  companySizeMax?: number;
+}): string | undefined {
+  if (!icp.companySizeMin) {
+    return undefined;
+  }
+  return icp.companySizeMax
+    ? `${icp.companySizeMin}-${icp.companySizeMax}`
+    : `${icp.companySizeMin}+`;
 }
 
 export function parseIcp(value: unknown): Icp {

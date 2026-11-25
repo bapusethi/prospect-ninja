@@ -1,10 +1,12 @@
-import type { Icp } from "@/modules/campaigns/schema";
+import { companySizeRange, type Icp } from "@/modules/campaigns/schema";
 
 export type ProspectSearchCriteria = {
   jobTitles: string[];
   industries: string[];
   locations: string[];
   companySize?: string;
+  /** Exact employee range ("1-50", "501+"), used when companySize is not set. */
+  companySizeRange?: string;
   keywords: string[];
   exclusions: string[];
   limit: number;
@@ -53,6 +55,7 @@ export function criteriaFromIcp(
     industries: icp.industries,
     locations: icp.locations,
     companySize: icp.companySize,
+    companySizeRange: companySizeRange(icp),
     keywords: icp.keywords,
     exclusions: icp.exclusions,
     limit,

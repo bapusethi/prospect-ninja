@@ -45,9 +45,13 @@ export function buildQuery(criteria: ProspectSearchCriteria): RocketReachPersonQ
     // Free-text industry keywords (e.g. "SaaS"); `company_industry` only accepts a fixed list.
     query.company_industry_keywords = industries;
   }
+  // A preset bucket maps to RocketReach's ranges; otherwise send the exact
+  // range (e.g. "1-50") derived from the campaign description.
   const sizes = criteria.companySize
     ? COMPANY_SIZE_VALUES[criteria.companySize]
-    : undefined;
+    : criteria.companySizeRange
+      ? [criteria.companySizeRange]
+      : undefined;
   if (sizes) {
     query.company_size = sizes;
   }

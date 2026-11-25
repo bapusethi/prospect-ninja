@@ -51,7 +51,13 @@ export function scoreProspect(
     reasons.push(`Industry matches ${industryHits.join(", ")}.`);
   }
 
-  const locationHits = matchedTerms(record.location, icp.locations);
+  // Score on the city part: "Melbourne, Australia" should match
+  // "Melbourne, VIC, Australia".
+  const locationHits = icp.locations.filter((term) =>
+    haystack(record.location).includes(
+      (term.split(",")[0] ?? term).trim().toLowerCase(),
+    ),
+  );
   if (locationHits.length > 0) {
     score += 20;
     reasons.push(`Location matches ${locationHits.join(", ")}.`);
