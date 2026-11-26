@@ -15,7 +15,6 @@ import {
   IconNinjaMark,
   IconPanelLeft,
   IconSettings,
-  IconSparkles,
   IconUser,
   IconUsers,
 } from "./icons";
@@ -26,7 +25,6 @@ const primaryLinks = [
   { href: "/prospects", label: "Prospects", Icon: IconUsers },
   { href: "/drafts", label: "Draft Queue", Icon: IconListChecks },
   { href: "/inbox", label: "Inbox", Icon: IconMessage },
-  { href: "/studio", label: "AI Message Studio", Icon: IconSparkles },
 ];
 
 const secondaryLinks = [
