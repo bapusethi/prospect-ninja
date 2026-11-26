@@ -520,8 +520,15 @@ export async function listHistory(userId: string) {
   });
 }
 
-/** Drafts still waiting on a decision: generated (or edited) but not approved or rejected. */
-const DRAFT_QUEUE_STATUSES = [MESSAGE_STATUS.draft, MESSAGE_STATUS.pendingReview];
+/**
+ * Messages still waiting on the user: drafts not yet decided, plus approved
+ * messages whose send didn't go through (e.g. expired session) so they can retry.
+ */
+const DRAFT_QUEUE_STATUSES = [
+  MESSAGE_STATUS.draft,
+  MESSAGE_STATUS.pendingReview,
+  MESSAGE_STATUS.approved,
+];
 
 export async function listDraftQueue(userId: string, campaignId?: string) {
   return prisma.outreachMessage.findMany({
@@ -544,23 +551,48 @@ export async function countDraftQueue(userId: string) {
   });
 }
 
-/** Approves every queued draft (optionally for one campaign), one audit event each. */
-export async function approveAllDrafts(userId: string, campaignId?: string) {
-  const queued = await listDraftQueue(userId, campaignId);
-  let approved = 0;
+/** Gap between bulk sends so LinkedIn doesn't see a burst. */
+const BULK_SEND_THROTTLE_MS = 1500;
+
+/**
+ * Approves and sends queued drafts one at a time: every one in the queue
+ * (optionally for one campaign), or only `ids` when given. Ids not in the
+ * user's queue are ignored. Already-approved messages (earlier failed sends)
+ * are just re-sent.
+ */
+export async function approveAndSendDrafts(
+  userId: string,
+  options: { campaignId?: string; ids?: string[] } = {},
+) {
+  const wanted = options.ids ? new Set(options.ids) : null;
+  const queued = (await listDraftQueue(userId, options.campaignId)).filter(
+    (message) => !wanted || wanted.has(message.id),
+  );
+  let sent = 0;
+  let simulated = 0;
   const failed: Array<{ id: string; error: string }> = [];
-  for (const message of queued) {
+  for (const [index, message] of queued.entries()) {
+    if (index > 0) {
+      await delay(BULK_SEND_THROTTLE_MS);
+    }
     try {
-      await approveMessage(userId, message.id);
-      approved += 1;
+      if (message.status !== MESSAGE_STATUS.approved) {
+        await approveMessage(userId, message.id);
+      }
+      const result = await sendMessage(userId, message.id);
+      if (result.status === MESSAGE_STATUS.demoRecorded) {
+        simulated += 1;
+      } else {
+        sent += 1;
+      }
     } catch (error) {
       failed.push({
         id: message.id,
-        error: error instanceof Error ? error.message : "Approval failed",
+        error: error instanceof Error ? error.message : "Send failed",
       });
     }
   }
-  return { approved, failed };
+  return { sent, simulated, failed };
 }
 
 /** Approved messages that haven't gone out yet. */
