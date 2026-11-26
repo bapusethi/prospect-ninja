@@ -7,11 +7,12 @@ import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { Select } from "@/components/Field";
 import {
-  IconCheck,
   IconLinkedIn,
   IconRefresh,
+  IconSend,
   IconSkipForward,
 } from "@/components/icons";
+import { MESSAGE_STATUS } from "@/modules/outreach/constants";
 import styles from "./DraftQueue.module.css";
 
 /** LinkedIn's limit for the note on a connection request. */
@@ -52,10 +53,18 @@ export async function post(path: string, method = "POST", payload?: unknown) {
 }
 
 /** Avatar, name/role and LinkedIn link, plus the campaign/status line. */
-export function ProspectCardHeader({ draft }: { draft: DraftCardData }) {
+export function ProspectCardHeader({
+  draft,
+  leading,
+}: {
+  draft: DraftCardData;
+  /** Rendered before the avatar, e.g. a selection checkbox. */
+  leading?: React.ReactNode;
+}) {
   return (
     <>
       <div className={styles.head}>
+        {leading}
         <span className={styles.avatar}>{initials(draft.prospectName)}</span>
         <div className={styles.who}>
           <Link href={`/prospects/${draft.prospectId}`} className={styles.name}>
@@ -85,11 +94,23 @@ export function ProspectCardHeader({ draft }: { draft: DraftCardData }) {
   );
 }
 
-export function DraftCard({ draft }: { draft: DraftCardData }) {
+export function DraftCard({
+  draft,
+  selected,
+  onToggleSelected,
+  disabled = false,
+}: {
+  draft: DraftCardData;
+  selected: boolean;
+  onToggleSelected: () => void;
+  /** Locks the card while a bulk send is running. */
+  disabled?: boolean;
+}) {
   const router = useRouter();
   const [text, setText] = useState(draft.body);
   const [pending, setPending] = useState<null | "approve" | "regenerate" | "skip">(null);
   const [error, setError] = useState<string | null>(null);
+  const busy = pending !== null || disabled;
   const dirty = text.trim() !== draft.body.trim();
   const length = Array.from(text).length;
 
@@ -106,15 +127,36 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
     }
   }
 
+  // Approved but still here means an earlier send didn't go through.
+  const alreadyApproved = draft.status === MESSAGE_STATUS.approved && !dirty;
+
   function approve() {
     void run("approve", async () => {
       // Save the edit first so the approved body is exactly what's on screen.
+      // Editing clears approval, so an edited message is always re-approved.
       if (dirty) {
         await post(`/api/v1/messages/${draft.id}`, "PATCH", { body: text });
       }
-      await post(`/api/v1/messages/${draft.id}/approve`);
+      if (!alreadyApproved) {
+        await post(`/api/v1/messages/${draft.id}/approve`);
+      }
+      const data = (await post(`/api/v1/messages/${draft.id}/send`)) as {
+        message?: { status: string };
+      };
+      if (data.message?.status === MESSAGE_STATUS.demoRecorded) {
+        window.alert("Not sent — demo provider. The attempt was recorded only.");
+      }
     });
   }
+
+  const approveLabel =
+    pending === "approve"
+      ? "Approving…"
+      : alreadyApproved
+        ? "Retry"
+        : dirty
+          ? "Save & approve"
+          : "Approve";
 
   function regenerate() {
     if (dirty && !window.confirm("Discard your unsaved edits and regenerate?")) {
@@ -135,29 +177,41 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
   }
 
   return (
-    <article className={styles.card}>
-      <ProspectCardHeader draft={draft} />
+    <article className={`${styles.card} ${selected ? styles.cardSelected : ""}`}>
+      <ProspectCardHeader
+        draft={draft}
+        leading={
+          <input
+            type="checkbox"
+            className={styles.check}
+            checked={selected}
+            onChange={onToggleSelected}
+            disabled={busy}
+            aria-label={`Select message for ${draft.prospectName}`}
+          />
+        }
+      />
 
       <textarea
         className={styles.textarea}
         value={text}
         onChange={(event) => setText(event.target.value)}
-        disabled={pending !== null}
+        disabled={busy}
         aria-label={`Draft for ${draft.prospectName}`}
       />
 
       <div className={styles.footer}>
-        <Button type="button" onClick={approve} disabled={pending !== null}>
+        <Button type="button" onClick={approve} disabled={busy}>
           <span className={styles.iconBtn}>
-            <IconCheck size={15} />
-            {pending === "approve" ? "Approving…" : dirty ? "Save & approve" : "Approve"}
+            <IconSend size={15} />
+            {approveLabel}
           </span>
         </Button>
         <Button
           type="button"
           variant="secondary"
           onClick={regenerate}
-          disabled={pending !== null}
+          disabled={busy}
         >
           <span className={styles.iconBtn}>
             <IconRefresh size={15} />
@@ -168,7 +222,7 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
           type="button"
           variant="ghost"
           onClick={skip}
-          disabled={pending !== null}
+          disabled={busy}
           title="Skip: reject this draft and remove it from the queue"
           aria-label="Skip draft"
         >
@@ -217,21 +271,50 @@ export function CampaignFilter({
   );
 }
 
-export function ApproveAllButton({
+/**
+ * Toolbar, selection and card grid for the Draft queue. The bulk button sends
+ * the selected cards, or the whole queue when nothing is selected.
+ */
+export function DraftQueueBoard({
+  drafts,
+  campaigns,
   campaignId,
-  count,
 }: {
+  drafts: Array<DraftCardData & { key: string }>;
+  campaigns: Array<{ id: string; name: string }>;
   campaignId?: string;
-  count: number;
 }) {
   const router = useRouter();
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  async function approveAll() {
+  // Drop ids that left the queue (sent, skipped, filtered out) after a refresh.
+  const selected = drafts.filter((draft) => picked.has(draft.id)).map((d) => d.id);
+  const allSelected = drafts.length > 0 && selected.length === drafts.length;
+  const count = selected.length || drafts.length;
+
+  function toggle(id: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setPicked(allSelected ? new Set() : new Set(drafts.map((draft) => draft.id)));
+  }
+
+  async function sendBulk() {
+    const scope = selected.length ? `${count} selected` : `all ${count}`;
     if (
       !window.confirm(
-        `Approve all ${count} drafts as they are saved? Unsaved edits on this page are not included.`,
+        `Approve and send ${scope} ${count === 1 ? "message" : "messages"} on LinkedIn as they are saved? Unsaved edits on this page are not included.`,
       )
     ) {
       return;
@@ -241,28 +324,80 @@ export function ApproveAllButton({
     try {
       const data = (await post("/api/v1/messages/approve-all", "POST", {
         campaignId,
-      })) as { result?: { approved: number; failed: unknown[] } };
+        ...(selected.length ? { ids: selected } : {}),
+      })) as {
+        result?: { sent: number; simulated: number; failed: unknown[] };
+      };
+      const sent = data.result?.sent ?? 0;
+      const simulated = data.result?.simulated ?? 0;
       const failed = data.result?.failed.length ?? 0;
       setNote(
-        `Approved ${data.result?.approved ?? 0}.${failed ? ` ${failed} could not be approved.` : ""}`,
+        [
+          `Sent ${sent}.`,
+          simulated ? `${simulated} recorded only (demo provider).` : "",
+          failed ? `${failed} could not be sent.` : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
       );
+      setPicked(new Set());
       router.refresh();
     } catch (err) {
-      setNote(err instanceof Error ? err.message : "Approve all failed.");
+      setNote(err instanceof Error ? err.message : "Bulk send failed.");
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <div>
-      <Button type="button" onClick={approveAll} disabled={pending || count === 0}>
-        <span className={styles.iconBtn}>
-          <IconCheck size={15} />
-          {pending ? "Approving…" : "Approve all"}
-        </span>
-      </Button>
-      {note ? <p className={styles.note}>{note}</p> : null}
-    </div>
+    <>
+      <div className={styles.toolbar}>
+        <label className={styles.selectAll}>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = selected.length > 0 && !allSelected;
+            }}
+            onChange={toggleAll}
+            disabled={pending || drafts.length === 0}
+            aria-label="Select all messages"
+          />
+          <span className={styles.count}>
+            {selected.length
+              ? `${selected.length} of ${drafts.length} selected`
+              : `${drafts.length} ${drafts.length === 1 ? "message" : "messages"} to review`}
+          </span>
+        </label>
+        <div className={styles.toolbarActions}>
+          <CampaignFilter campaigns={campaigns} basePath="/drafts" />
+          <Button type="button" onClick={sendBulk} disabled={pending || drafts.length === 0}>
+            <span className={styles.iconBtn}>
+              <IconSend size={15} />
+              {pending
+                ? "Approving…"
+                : selected.length
+                  ? `Approve (${selected.length})`
+                  : "Approve all"}
+            </span>
+          </Button>
+        </div>
+      </div>
+      {note ? <p className={styles.bulkNote}>{note}</p> : null}
+
+      {drafts.length > 0 ? (
+        <div className={styles.grid}>
+          {drafts.map(({ key, ...draft }) => (
+            <DraftCard
+              key={key}
+              draft={draft}
+              selected={picked.has(draft.id)}
+              onToggleSelected={() => toggle(draft.id)}
+              disabled={pending}
+            />
+          ))}
+        </div>
+      ) : null}
+    </>
   );
 }

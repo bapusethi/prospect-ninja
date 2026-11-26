@@ -1,17 +1,14 @@
 import Link from "next/link";
+import { Banner } from "@/components/Banner";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
-import {
-  ApproveAllButton,
-  CampaignFilter,
-  DraftCard,
-} from "@/components/DraftQueue";
-import styles from "@/components/DraftQueue.module.css";
+import { DraftQueueBoard } from "@/components/DraftQueue";
 import { EmptyState } from "@/components/EmptyState";
 import { IconListChecks } from "@/components/icons";
 import { PageHeader } from "@/components/PageHeader";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/session";
+import { getLinkedInConnection } from "@/modules/integrations/service";
 import { listDraftQueue } from "@/modules/outreach/service";
 
 export default async function DraftQueuePage({
@@ -21,13 +18,14 @@ export default async function DraftQueuePage({
 }) {
   const user = await requireUser();
   const { campaignId } = await searchParams;
-  const [drafts, campaigns] = await Promise.all([
+  const [drafts, campaigns, linkedin] = await Promise.all([
     listDraftQueue(user.id, campaignId || undefined),
     prisma.campaign.findMany({
       where: { userId: user.id },
       select: { id: true, name: true },
       orderBy: { createdAt: "desc" },
     }),
+    getLinkedInConnection(user.id),
   ]);
 
   return (
@@ -35,18 +33,35 @@ export default async function DraftQueuePage({
       <PageHeader
         kicker="Make every word count"
         title="Draft queue"
-        description="Review, refine, and approve your personal outreach. Nothing is sent until you approve it."
-        actions={
-          <ApproveAllButton campaignId={campaignId || undefined} count={drafts.length} />
-        }
+        description="Review, refine, and approve your personal outreach. Approving sends the message on LinkedIn straight away."
       />
 
-      <div className={styles.toolbar}>
-        <span className={styles.count}>
-          {drafts.length} {drafts.length === 1 ? "message" : "messages"} to review
-        </span>
-        <CampaignFilter campaigns={campaigns} basePath="/drafts" />
-      </div>
+      {!linkedin.live ? (
+        <Banner tone="warn">
+          LinkedIn isn&apos;t linked, so approving only records a simulated send.{" "}
+          <Link href="/connect-linkedin">Connect LinkedIn</Link>
+        </Banner>
+      ) : null}
+
+      <DraftQueueBoard
+        campaigns={campaigns}
+        campaignId={campaignId || undefined}
+        drafts={drafts.map((draft) => ({
+          // Remount when the stored body changes (e.g. after regenerate).
+          key: `${draft.id}:${draft.updatedAt.toISOString()}`,
+          id: draft.id,
+          body: draft.body,
+          status: draft.status,
+          prospectId: draft.prospectId,
+          prospectName: draft.prospect.fullName,
+          role: [draft.prospect.jobTitle, draft.prospect.companyName]
+            .filter(Boolean)
+            .join(" at "),
+          linkedinUrl: draft.prospect.linkedinUrl,
+          campaignName: draft.campaign.name,
+          isDemo: draft.prospect.isDemo,
+        }))}
+      />
 
       {drafts.length === 0 ? (
         <Card>
@@ -55,35 +70,13 @@ export default async function DraftQueuePage({
             title="All caught up"
             description="New drafts appear here automatically when discovery adds prospects to a campaign."
             action={
-              <Link href="/send">
-                <Button variant="secondary">View approved messages</Button>
+              <Link href="/history">
+                <Button variant="secondary">View sent messages</Button>
               </Link>
             }
           />
         </Card>
-      ) : (
-        <div className={styles.grid}>
-          {drafts.map((draft) => (
-            <DraftCard
-              // Remount when the stored body changes (e.g. after regenerate).
-              key={`${draft.id}:${draft.updatedAt.toISOString()}`}
-              draft={{
-                id: draft.id,
-                body: draft.body,
-                status: draft.status,
-                prospectId: draft.prospectId,
-                prospectName: draft.prospect.fullName,
-                role: [draft.prospect.jobTitle, draft.prospect.companyName]
-                  .filter(Boolean)
-                  .join(" at "),
-                linkedinUrl: draft.prospect.linkedinUrl,
-                campaignName: draft.campaign.name,
-                isDemo: draft.prospect.isDemo,
-              }}
-            />
-          ))}
-        </div>
-      )}
+      ) : null}
     </>
   );
 }

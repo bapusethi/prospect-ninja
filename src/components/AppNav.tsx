@@ -14,9 +14,7 @@ import {
   IconMessage,
   IconNinjaMark,
   IconPanelLeft,
-  IconSend,
   IconSettings,
-  IconSparkles,
   IconUser,
   IconUsers,
 } from "./icons";
@@ -26,9 +24,7 @@ const primaryLinks = [
   { href: "/targeting", label: "Campaigns", Icon: IconMegaphone },
   { href: "/prospects", label: "Prospects", Icon: IconUsers },
   { href: "/drafts", label: "Draft Queue", Icon: IconListChecks },
-  { href: "/send", label: "Send", Icon: IconSend },
   { href: "/inbox", label: "Inbox", Icon: IconMessage },
-  { href: "/studio", label: "AI Message Studio", Icon: IconSparkles },
 ];
 
 const secondaryLinks = [
